@@ -1,8 +1,25 @@
 import os
-
 print(os.getcwd())
 
 # Provides working directory.
+
+import xlrd
+
+def read_column():
+    loc = (input(r'Please enter file path of .xlsx file containing locus tag/gene id data:'))
+    wb = xlrd.open_workbook(loc)
+    sheet = wb.sheet_by_index(0)
+    sheet.cell_value(0,0)
+    global id_tag_list
+    id_tag_list = []
+    column = int(input('Locus tag/Gene id column number:'))
+    for i in range(sheet.nrows):
+        cell = sheet.cell_value(i,column)
+        cell = "".join([i for i in cell if i.isalnum()])
+        id_tag_list.append(cell)
+    id_tag_list = id_tag_list[1:len(id_tag_list)]
+
+# Function uses xldr module to iterate through column (column number specified by user) of xlsx file, storing value of each cell in id_tag_list list.
 
 reference = input('Name of File containing reference sequence (DNA/Protein) in FASTA format:')
 
@@ -18,7 +35,7 @@ file_data = file_data.upper()
 bearing_4 = file_data.find('SEQUENCE') + len('SEQUENCE')
 file_data = file_data[bearing_4: len(file_data)]
 
-# Cuts first line off (containing strain info etc).
+# Cuts first line off of .fasta reference sequence (containing strain info etc).
 
 SOI = input('Name of file containing sequence of gene of interest include file extension (.gff/.gb/.fasta):')
 start = len(SOI) - 2
@@ -38,66 +55,106 @@ with open(SOI,'r') as z:
 
 target = "".join([i for i in target if i.isalnum()])
 
-# File containing protein/DNA sequence of gene is read and converted into continuous string with all special characters and numbers removed.
+# File containing protein/DNA sequence(s) of gene(s) of interest is read and converted into continuous string with all special characters and numbers removed.
 
 if file_type == 'ta':
     bearing_5 = target.find('sequence') + len('sequence')
     target = target[bearing_5: len(target)]
-    print(target[0:1000])
 
 # If file extension is .fasta, first line is cut off.
 
 if switch == 1:
-    locus_tag = input('Please paste locus tag here:')
-    locus_tag = "".join([i for i in locus_tag if i.isalnum()])
-    bearing_1 = target.find(locus_tag)
-    target = target[bearing_1:len(target)]
-    bearing_2 = target.find('translation') + len('translation')
-    target = target[bearing_2:len(target)]
-    bearing_3 = target.find('gene')
-    target = target[0:bearing_3]
-    print(target)
-    switch = 0
+    read_column()
+    prot_seqs = []
+    for i in range(len(id_tag_list)):
+        locus_tag = id_tag_list[i]
+        bearing_1 = target.find(locus_tag)
+        chunk = target[bearing_1:len(target)]
+        bearing_2 = chunk.find('translation') + len('translation')
+        chunk = chunk[bearing_2:len(chunk)]
+        bearing_3 = chunk.find('gene')
+        chunk = chunk[0:bearing_3]
+        prot_seqs.append(chunk)
+        switch = 0
 elif switch == 2:
-    gene_id = input('Please paste gene id here:')
-    bearing_1 = target.find(gene_id)
-    target = target[bearing_1:len(target)]
+    read_column()
+    prot_seqs = []
+    DNA_seqs = []
     desired_info = input('Would you like to extract DNA or PROTEIN data?:')
-    if desired_info == 'DNA':
-        bearing_2 = target.find('codingsequence') + len('codingsequence')
-        target = target[bearing_2:len(target)]
-        bearing_3 = target.find('proteinsequence')
-        target = target[0:bearing_3]
-        target = target.upper()
-        print(target)
-        switch = 0
-    else:
-        bearing_2 = target.find('proteinsequence') + len('proteinsequence')
-        target = target[bearing_2:len(target)]
-        bearing_3 = target.find('endgene')
-        target = target[0:bearing_3]
-        print(target)
-        switch = 0
+    for i in range(len(id_tag_list)):
+        gene_id = id_tag_list[i]
+        bearing_1 = target.find(gene_id)
+        chunk = target[bearing_1:len(target)]
+        if desired_info == 'DNA':
+            bearing_2 = chunk.find('codingsequence') + len('codingsequence')
+            chunk = chunk[bearing_2:len(chunk)]
+            bearing_3 = chunk.find('proteinsequence')
+            chunk = chunk[0:bearing_3]
+            chunk = chunk.upper()
+            DNA_seqs.append(chunk)
+            switch = 0
+        else:
+            bearing_2 = chunk.find('proteinsequence') + len('proteinsequence')
+            chunk = chunk[bearing_2:len(chunk)]
+            bearing_3 = chunk.find('endgene')
+            chunk = chunk[0:bearing_3]
+            prot_seqs.append(chunk)
+            switch = 0
 
-# Operations for data extraction from .gb and .gff files, respectively. Locus tag/ gene id is used to navigate to relevant region.
-# All of the string prior to that is essentially chopped off. Relevant code word e.g. 'proteinsequence' is then used to navigate to
-# relevant region. Everything after that code word until a second code word e.g. 'end gene' is extracted. 
+# Operations for data extraction from .gb and .gff files, respectively. Locus tags/gene ids are pulled from .xlsx file using read_column function.
+# Locus tags/gene ids are used to navigate to relevant section of .gb/.gff file.
+# Protein/DNA sequence data is extracted (specified by user) and is stored in prot_seqs/DNA_seqs list.
 
 if switch == 0:
-    target = target.upper()
-    for i in range(len(file_data)-(len(target) - 1)):
-        x = file_data[i]
-        if file_data[i:i + len(target)] == target:
-            if i >= 499:
-                h = 500
-            else:
-                h = i
-            match = file_data[i - h:i + len(target) + 500]
-            print(i)
-            print(len(match))
-            print(match)
-            print(len(match) - len(target))
-            print('Done')
+    if file_type == 'gb' or file_type == 'ff' and desired_info == 'PROTEIN':
+        prot_seq_match = []
+        for i in range(len(prot_seqs)):
+            p = prot_seqs[i]
+            p = p.upper()
+            for i in range(len(file_data)-(len(p) - 1)):
+                x = file_data[i]
+                if file_data[i:i + len(p)] == p:
+                    if i >= 499:
+                        h = 500
+                    else:
+                        h = i
+                    match = file_data[i - h:i + len(p) + 500]
+                    prot_seq_match.append(match)
+        print('Done')
+        print(prot_seq_match)
+    elif file_type == 'ff' and desired_info == 'DNA':
+        DNA_seq_match = []
+        for i in range(len(DNA_seqs)):
+            d = DNA_seqs[i]
+            d = d.upper()
+            for i in range(len(file_data) - (len(d) - 1)):
+                x = file_data[i]
+                if file_data[i:i + len(d)] == d:
+                    if i >= 499:
+                        h = 500
+                    else:
+                        h = i
+                    match = file_data[i - h:i + len(d) + 500]
+                    DNA_seq_match.append(match)
+        print('Done')
+        print(DNA_seq_match)
+    else:
+        target = "".join([i for i in target if i.isalpha()])
+        target = target.upper()
+        for i in range(len(file_data) - (len(target) - 1)):
+            x = file_data[i]
+            if file_data[i:i + len(target)] == target:
+                match = file_data[i - 500:i + len(target) + 500]
+                if i >= 499:
+                    h = 500
+                else:
+                    h = i
+                match = file_data[i - h:i + len(target) + 500]
+                print('Done')
+                print(match)
 
-# Mapping: A for loop iterates over the reference sequence using a window of equal length to the gene sequence.
-# Any matches are returned. 
+# Mapping: For .gb and .gff files, a loop is used to iterate through list storing extracted DNA/protein sequence data.
+# Each item in the list is mapped onto the .fasta reference sequence.
+# Any matches are returned with + 500 characters either side and are stored in the prot_seq_match/DNA_seq_match list.
+# For .fasta files, the sequence is simply mapped onto the reference.
+# A match is returned with + 500 characters either side.
