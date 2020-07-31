@@ -5,21 +5,35 @@ print(os.getcwd())
 
 import xlrd
 
-def read_column():
+def find_column():
     loc = (input(r'Please enter file path of .xlsx file containing locus tag/gene id data:'))
     wb = xlrd.open_workbook(loc)
+    global sheet
     sheet = wb.sheet_by_index(0)
     sheet.cell_value(0,0)
+    for i in range(sheet.ncols):
+        cell = sheet.cell_value(0, i)
+        cell = "".join([i for i in cell if i.isalnum()])
+        cell = cell.upper()
+        if cell == 'GENEID':
+            global column
+            column = i
+        elif cell == 'LOCUSTAG':
+            column = i
+        else:
+            continue
+
+def read_column():
     global id_tag_list
     id_tag_list = []
-    column = int(input('Locus tag/Gene id column number:'))
     for i in range(sheet.nrows):
         cell = sheet.cell_value(i,column)
         cell = "".join([i for i in cell if i.isalnum()])
         id_tag_list.append(cell)
     id_tag_list = id_tag_list[1:len(id_tag_list)]
 
-# Function uses xldr module to iterate through column (column number specified by user) of xlsx file, storing value of each cell in id_tag_list list.
+# find_column function uses xldr module to iterate through columns and find one containing gene ids/locus tags.
+# read_column function iterates through rows of column found by find_column, storing value of each cell in id_tag_list list.
 
 reference = input('Name of File containing reference sequence (DNA/Protein) in FASTA format:')
 
@@ -32,8 +46,9 @@ file_data = file_data.upper()
 
 # Reads fasta file containing reference sequence and converts it into a continuous sting with no special characters, all upper case.
 
-bearing_4 = file_data.find('SEQUENCE') + len('SEQUENCE')
-file_data = file_data[bearing_4: len(file_data)]
+if file_data.find('SEQUENCE') >= 0:
+    bearing_4 = file_data.find('SEQUENCE') + len('SEQUENCE')
+    file_data = file_data[bearing_4: len(file_data)]
 
 # Cuts first line off of .fasta reference sequence (containing strain info etc).
 
@@ -64,6 +79,7 @@ if file_type == 'ta':
 # If file extension is .fasta, first line is cut off.
 
 if switch == 1:
+    find_column()
     read_column()
     prot_seqs = []
     for i in range(len(id_tag_list)):
@@ -77,6 +93,7 @@ if switch == 1:
         prot_seqs.append(chunk)
         switch = 0
 elif switch == 2:
+    find_column()
     read_column()
     prot_seqs = []
     DNA_seqs = []
@@ -101,13 +118,17 @@ elif switch == 2:
             prot_seqs.append(chunk)
             switch = 0
 
-# Operations for data extraction from .gb and .gff files, respectively. Locus tags/gene ids are pulled from .xlsx file using read_column function.
+# Operations for data extraction from .gb and .gff files, respectively. Locus tags/gene ids are pulled from .xlsx file using find + read_column functions.
 # Locus tags/gene ids are used to navigate to relevant section of .gb/.gff file.
-# Protein/DNA sequence data is extracted (specified by user) and is stored in prot_seqs/DNA_seqs list.
+# Protein/DNA sequence data is extracted (specified by user) for each tag/id and is stored in prot_seqs/DNA_seqs list.
+
+o = 0
 
 if switch == 0:
     if file_type == 'gb' or file_type == 'ff' and desired_info == 'PROTEIN':
         prot_seq_match = []
+        matched_ids_tags = []
+        key_list = []
         for i in range(len(prot_seqs)):
             p = prot_seqs[i]
             p = p.upper()
@@ -120,10 +141,17 @@ if switch == 0:
                         h = i
                     match = file_data[i - h:i + len(p) + 500]
                     prot_seq_match.append(match)
+                    matched_ids_tags.append(id_tag_list[o])
+            o += 1
+        result = dict(zip(matched_ids_tags, prot_seq_match))
         print('Done')
-        print(prot_seq_match)
+        for key in result:
+            key_list.append(key)
+        print(key_list)
     elif file_type == 'ff' and desired_info == 'DNA':
+        matched_ids_tags = []
         DNA_seq_match = []
+        key_list = []
         for i in range(len(DNA_seqs)):
             d = DNA_seqs[i]
             d = d.upper()
@@ -136,8 +164,13 @@ if switch == 0:
                         h = i
                     match = file_data[i - h:i + len(d) + 500]
                     DNA_seq_match.append(match)
+                    matched_ids_tags.append(id_tag_list[o])
+            o += 1
+        result = dict(zip(matched_ids_tags, DNA_seq_match))
         print('Done')
-        print(DNA_seq_match)
+        for key in result:
+            key_list.append(key)
+        print(key_list)
     else:
         target = "".join([i for i in target if i.isalpha()])
         target = target.upper()
@@ -156,5 +189,7 @@ if switch == 0:
 # Mapping: For .gb and .gff files, a loop is used to iterate through list storing extracted DNA/protein sequence data.
 # Each item in the list is mapped onto the .fasta reference sequence.
 # Any matches are returned with + 500 characters either side and are stored in the prot_seq_match/DNA_seq_match list.
-# For .fasta files, the sequence is simply mapped onto the reference.
-# A match is returned with + 500 characters either side.
+# Variable o is used to keep track of id/tag currently being mapped. Successfully mapped tags/ids are appended to matched_ids_tags list.
+# Matched_ids_tags and prot_seq_match/DNA_seq_match lists are zipped together to form a dictionary reflecting successfully mapped tags/ids.
+# Keys are appended to a list, which is printed.
+# For .fasta files, the sequence is simply mapped onto the reference and a match is returned with + 500 characters either side.
